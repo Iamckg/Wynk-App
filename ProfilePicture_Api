@@ -1,0 +1,43 @@
+@RestResource(urlMapping='/ProfilePicture/*')
+global with sharing class ProfilePicture_Api {
+
+    @HttpPost
+    global static void uploadProfilePicture(String AccountId) {
+        Map<String, Object> response = new Map<String, Object>();
+        
+        try {
+            RestRequest req = RestContext.request;
+            Blob fileBody = req.requestBody;
+            String fileName = req.headers.get('Content-Disposition').split('"')[1];
+
+            // Create a new ContentVersion record to represent the file
+            ContentVersion cv = new ContentVersion();
+            cv.Title = fileName;
+            cv.VersionData = fileBody;
+            cv.PathOnClient = '/' + fileName;
+            cv.FirstPublishLocationId = AccountId; // Set the ParentId to associate with User record
+            
+            insert cv;
+
+            // Retrieve the updated user record with the new profile picture
+            Customer__c userRecord = [SELECT Id, Name, Last_Name__c, Base64__c,Email__c FROM Customer__c WHERE Id = :AccountId];
+
+            // Build the image URL
+            String imageUrl = '/sfc/servlet.shepherd/version/download/' + cv.Id;
+            response.put('Base64',userRecord.Base64__c);
+            response.put('AccountId', userRecord.Id);
+            response.put('ImageUrl', imageUrl);
+            response.put('message', 'Profile picture uploaded successfully.');
+            response.put('Status', 'Success');
+        } catch (Exception ex) {
+            response.put('Status', 'Failed');
+            response.put('message', ex.getMessage());
+        }
+        
+        String jsonResponse = JSON.serialize(response);
+        
+        // Return the JSON response
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        RestContext.response.responseBody = Blob.valueOf(jsonResponse);
+    }
+}
