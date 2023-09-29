@@ -1,0 +1,66 @@
+@RestResource(urlMapping='/FriendsList/*')
+global class FriendsList_Api {
+    @HttpPost
+    global static void getLabelList(List<String> mobileNumberList ) {
+        Map<String, Object> response = new Map<String, Object>();
+
+        try {
+        
+            List<Customer__c> records = [SELECT Id, Name, Last_Name__c, Phone__c, (SELECT ContentDocumentId FROM ContentDocumentLinks) 
+                                         FROM Customer__c WHERE Phone__c IN :mobileNumberList];
+            Set<String> matchedPhoneNumbers = new Set<String>();
+            
+            // Create a list to store filtered customer data
+            List<Map<String, Object>> friendsList = new List<Map<String, Object>>();
+
+            // Iterate through filtered records and add them to the list
+            for (Customer__c record : records) {
+                matchedPhoneNumbers.add(record.Phone__c); // Add matched phone numbers to the set
+                Map<String, Object> customerData = new Map<String, Object>();
+                customerData.put('Phone', record.Phone__c);
+                customerData.put('lastname', record.Last_Name__c);
+                customerData.put('firstname', record.Name);
+                customerData.put('AccountId', record.Id);
+                friendsList.add(customerData);
+                for (ContentDocumentLink contentDocumentLink : record.ContentDocumentLinks) {
+                    // Get the ContentDocumentId
+                    Id contentDocumentId = contentDocumentLink.ContentDocumentId;
+                    // Query the ContentDistribution associated with the ContentDocumentId
+                    List<ContentDistribution> contentDistributions = [SELECT Id, DistributionPublicUrl FROM ContentDistribution 
+                                                                     WHERE ContentVersionId IN (SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocumentId) 
+                                                                     LIMIT 1];  
+                    if (contentDistributions.size() > 0) {
+                        ContentDistribution contentDistribution = contentDistributions[0]; 
+                        // Get the public link URL from ContentDistribution
+                        String publicLinkUrl = contentDistribution.DistributionPublicUrl;
+                        customerData.put('ImageUrl', publicLinkUrl);
+                    }
+                }
+            }
+            
+            // Create a list to store unmatched phone numbers
+            List<String> unmatchedPhoneNumbers = new List<String>();
+            for (String phoneNumber : mobileNumberList) {
+                if (!matchedPhoneNumbers.contains(phoneNumber)) {
+                    unmatchedPhoneNumbers.add(phoneNumber);
+                }
+            }
+
+            // Add the list of filtered customer data to the response
+
+            response.put('FriendsList', friendsList);
+            response.put('UnmatchedPhoneNumbers', unmatchedPhoneNumbers); // Add unmatched phone numbers to the response
+            response.put('Totalcount', String.valueOf(friendsList.size()));
+            response.put('Status', 'Success');
+        } catch (Exception ex) {
+            response.put('Status', 'Failed');
+            response.put('message', ex.getMessage());
+        }
+
+        String jsonResponse = JSON.serialize(response);
+
+        // Return the JSON response
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        RestContext.response.responseBody = Blob.valueOf(jsonResponse);
+    }
+}
