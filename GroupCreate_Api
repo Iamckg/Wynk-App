@@ -1,0 +1,60 @@
+@RestResource(urlMapping='/Group/*')
+global class GroupCreate_Api {
+    @HttpPost
+    global static void CreateGroup(String UserId, String title, String GroupDate, String Description, String PicturesBase64) {
+        Map<String, Object> response = new Map<String, Object>();
+        
+        try {
+            
+            Date groupDate1 = String.isNotBlank(GroupDate) ? Date.valueOf(GroupDate) : null ;
+            Group__c gp = new Group__c();
+            gp.Name = title;
+            gp.Customer__c = UserId;
+            gp.Description__c = String.isNotBlank(Description) ? Description : '';
+            gp.Date__c = groupDate1;
+            gp.ID__c = UserId;
+            insert gp;
+            
+            
+            if (String.isNotBlank(PicturesBase64)) {
+                // Create and insert the ContentVersion only if PicturesBase64 is provided
+                ContentVersion contentVersion = new ContentVersion();
+                contentVersion.Title = title + '_Picture'; // Set an appropriate title
+                contentVersion.PathOnClient = title + '.png'; // Set the file name
+                contentVersion.VersionData = EncodingUtil.base64Decode(PicturesBase64);
+                Insert contentVersion;
+                
+                // Create ContentDocumentLink records to associate images with group members
+                ContentDocumentLink cdl = new ContentDocumentLink();
+                cdl.ContentDocumentId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :contentVersion.Id].ContentDocumentId;
+                cdl.LinkedEntityId = gp.Id;
+                cdl.ShareType = 'V'; // Set the appropriate sharing type
+                cdl.Visibility = 'AllUsers'; // Set the appropriate visibility
+                insert cdl;
+                
+                // Retrieve the base64 image from the newly inserted ContentVersion
+                String base64Image = EncodingUtil.base64Encode(contentVersion.VersionData);
+                response.put('PicturesBase64', base64Image);
+            }else{
+                 response.put('PicturesBase64', '');
+            }
+        
+            
+            response.put('Description', gp.Description__c);
+            response.put('GroupDate', gp.Date__c);
+            response.put('Name', gp.Name);
+            response.put('AccountId', gp.Id);
+            response.put('message', 'Your Group is Successfully Created.');
+            response.put('Status', 'Success');
+        } catch (Exception ex) {
+            response.put('Status', 'Failed');
+            response.put('message', ex.getMessage());
+        }
+        
+        String jsonResponse = JSON.serialize(response);
+        
+        // Return the JSON response
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        RestContext.response.responseBody = Blob.valueOf(jsonResponse);
+    }
+}
