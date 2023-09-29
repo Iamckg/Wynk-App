@@ -1,0 +1,69 @@
+@RestResource(urlMapping='/MyFriendDOB/*')
+global class MyFriends_DOB_Api {
+    @HttpPost
+    global static void MyfriendList(String UserId, Integer currentMonth) {
+        Map<String, Object> response = new Map<String, Object>();
+
+        try { 
+            List<Map<String, Object>> MyfriendsList = new List<Map<String, Object>>();
+            
+            // Query Friend__c records for the specified user
+            List<Friend__c> friendList = [SELECT Id, Name, Customer__c FROM Friend__c WHERE Customer__c = :UserId];
+
+            for (Friend__c friend : friendList) {
+                Map<String, Object> friendData = new Map<String, Object>();
+                
+                // Query associated Customer__c records (friends) whose birthday matches the currentMonth
+                List<Customer__c> customers = [SELECT Id, Name, Last_Name__c, Date_of_Birth__c, Phone__c, Label__r.Name 
+                                               FROM Customer__c 
+                                               WHERE Id = :friend.Name AND CALENDAR_MONTH(Date_of_Birth__c) = :currentMonth];
+
+                if (customers.size() > 0) {
+                    Customer__c customer = customers[0];
+                    
+                    friendData.put('Label', customer.Label__r.Name);
+                    friendData.put('Phone', customer.Phone__c);
+                    friendData.put('DOB', customer.Date_of_Birth__c);
+                    friendData.put('LastName', customer.Last_Name__c);
+                    friendData.put('FirstName', customer.Name);
+                    friendData.put('AccountId', customer.Id);
+                    
+                    // Query the ContentDocumentLink object with the ContentDocumentId field included
+                    List<ContentDocumentLink> contentDocumentLinks = [SELECT Id, ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = :customer.Id];
+
+                    for (ContentDocumentLink contentDocumentLink : contentDocumentLinks) {
+                        // Get the ContentDocumentId
+                        Id contentDocumentId = contentDocumentLink.ContentDocumentId;
+                        // Query the ContentDistribution associated with the ContentDocumentId
+                        List<ContentDistribution> contentDistributions = [SELECT Id, DistributionPublicUrl FROM ContentDistribution 
+                                                                         WHERE ContentVersionId IN (SELECT Id FROM ContentVersion WHERE ContentDocumentId = :contentDocumentId) LIMIT 1];  
+                        if (contentDistributions.size() > 0) {
+                            ContentDistribution contentDistribution = contentDistributions[0]; 
+                            // Get the public link URL from ContentDistribution
+                            String publicLinkUrl = contentDistribution.DistributionPublicUrl;
+                            friendData.put('ImageUrl', publicLinkUrl);
+                        }
+                    }
+                    MyfriendsList.add(friendData);
+                }
+            }
+  
+            if (MyfriendsList.isEmpty()) {
+                response.put('message', 'No friends have birthdays in the current month.');
+                 response.put('FriendsList', MyfriendsList);
+            } else {
+                response.put('FriendsList', MyfriendsList);
+            }
+            response.put('Status', 'Success');
+        } catch (Exception ex) {
+            response.put('Status', 'Failed');
+            response.put('message', ex.getMessage());
+        }
+
+        String jsonResponse = JSON.serialize(response);
+
+        // Return the JSON response
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        RestContext.response.responseBody = Blob.valueOf(jsonResponse);
+    }
+}
