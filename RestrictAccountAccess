@@ -1,0 +1,22 @@
+trigger RestrictAccountAccess on Account (before insert, before update, before delete) {
+    // Get the user's profile name or permission set names
+    String userProfile = [SELECT Profile.Name FROM User WHERE Id = :UserInfo.getUserId()].Profile.Name;
+    
+    // Define the profile or permission set name that should be restricted
+    String restrictedProfileOrPermissionSet = 'Partner Community User'; // Change this to the actual name
+    
+    // Check if the user's profile matches the restricted profile or permission set
+    if (userProfile == restrictedProfileOrPermissionSet) {
+        if (Trigger.isInsert || Trigger.isUpdate) {
+            // Prevent the user from inserting or updating Account records
+            for (Account acc : Trigger.new) {
+                acc.addError('You do not have permission to create or update Account records.');
+            }
+        } else if (Trigger.isDelete) {
+            // Prevent the user from deleting Account records
+            for (Account acc : Trigger.old) {
+                acc.addError('You do not have permission to delete Account records.');
+            }
+        }
+    }
+}
