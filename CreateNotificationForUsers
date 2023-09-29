@@ -1,0 +1,39 @@
+trigger CreateNotificationForUsers on Notification__c (after insert , after update) {
+    List<User_Notification__c> UserNotificationList = new List<User_Notification__c>();
+    
+    // Collect UserIds based on your criteria (All_Customer__c) only once
+    List<Customer__c> UserIds = new List<Customer__c>();
+    
+    if (Trigger.new[0].All_Customer__c) {
+        UserIds = [SELECT Id FROM Customer__c WHERE IsProfile__c = true AND IsDeleted__c = false];
+    }
+
+     for (Notification__c nt : Trigger.New) {
+        if (!nt.All_Customer__c) {
+            User_Notification__c UserNotification = new User_Notification__c();
+            UserNotification.Customer__c = nt.Customer__c; // Update to the new lookup field
+            UserNotification.Name = 'Admin notification';
+
+            // Remove <p> tags from the message
+            UserNotification.Message__c = nt.Notification_Text__c.replaceAll('<p>|</p>', '');
+
+            UserNotificationList.add(UserNotification);
+        } else {
+            for (Customer__c cust : UserIds) {
+                User_Notification__c UserNotifications = new User_Notification__c();
+                UserNotifications.Customer__c = cust.Id;
+                UserNotifications.Name = 'Admin notification';
+
+                // Remove <p> tags from the message
+                UserNotifications.Message__c = nt.Notification_Text__c.replaceAll('<p>|</p>', '');
+
+                UserNotificationList.add(UserNotifications);
+            }
+        }
+    }
+
+    // Insert all User_Notification__c records in a single DML operation
+    if (!UserNotificationList.isEmpty()) {
+        insert UserNotificationList;
+    }
+}
